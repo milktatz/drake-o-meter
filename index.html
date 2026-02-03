@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drake-O-Meter</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+  background: #020617;
+  color: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.container {
+  max-width: 600px;
+  width: 100%;
+  background: #020617;
+  padding: 26px;
+  border-radius: 16px;
+  box-shadow: 0 15px 45px rgba(0,0,0,.6);
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 2.2rem;
+}
+
+.meter {
+  background: #1e293b;
+  height: 32px;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.fill {
+  height: 100%;
+  width: 50%;
+  background: linear-gradient(90deg, #22c55e, #3b82f6);
+  text-align: center;
+  line-height: 32px;
+  color: #020617;
+  font-weight: 800;
+  transition: width .4s ease;
+}
+
+.counts {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.total {
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.trust {
+  background: #22c55e;
+  margin-bottom: 12px;
+}
+
+.distrust {
+  background: #ef4444;
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.footer {
+  margin-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+a {
+  color: #60a5fa;
+  text-decoration: none;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+  <h1>Drake-O-Meter</h1>
+  <p>Do you trust Drake May to win the Super Bowl?</p>
+
+  <div class="meter">
+    <div id="fill" class="fill">50%</div>
+  </div>
+
+  <div class="counts">
+    <div>Trust: <strong id="trustCount">0</strong></div>
+    <div>Don’t Trust: <strong id="distrustCount">0</strong></div>
+  </div>
+
+  <div class="total">
+    Total Votes: <strong id="totalVotes">0</strong>
+  </div>
+
+  <button class="trust" id="trustBtn">Trust Drake May</button>
+  <button class="distrust" id="distrustBtn">Don’t Trust Drake May</button>
+
+  <p id="cooldownText"></p>
+
+  <div class="footer">
+    <a href="https://venmo.com/milktatzz" target="_blank">Venmo: @milktatzz</a>
+    <span>1 vote / 5 min</span>
+  </div>
+</div>
+
+<script>
+const COOLDOWN = 5 * 60 * 1000;
+const LAST_VOTE = "drake_o_last_vote";
+const COUNTS = "drake_o_counts";
+
+let counts = JSON.parse(localStorage.getItem(COUNTS)) || { trust: 0, distrust: 0 };
+
+const trustBtn = document.getElementById("trustBtn");
+const distrustBtn = document.getElementById("distrustBtn");
+const trustCount = document.getElementById("trustCount");
+const distrustCount = document.getElementById("distrustCount");
+const totalVotesEl = document.getElementById("totalVotes");
+const fill = document.getElementById("fill");
+const cooldownText = document.getElementById("cooldownText");
+
+function updateUI() {
+  trustCount.textContent = counts.trust;
+  distrustCount.textContent = counts.distrust;
+
+  const total = counts.trust + counts.distrust;
+  totalVotesEl.textContent = total;
+
+  const percent = total ? Math.round((counts.trust / total) * 100) : 50;
+  fill.style.width = percent + "%";
+  fill.textContent = percent + "%";
+}
+
+function canVote() {
+  const last = localStorage.getItem(LAST_VOTE);
+  return !last || Date.now() - last > COOLDOWN;
+}
+
+function startCooldown() {
+  trustBtn.disabled = true;
+  distrustBtn.disabled = true;
+
+  const interval = setInterval(() => {
+    const remaining = COOLDOWN - (Date.now() - localStorage.getItem(LAST_VOTE));
+    if (remaining <= 0) {
+      cooldownText.textContent = "";
+      trustBtn.disabled = false;
+      distrustBtn.disabled = false;
+      clearInterval(interval);
+    } else {
+      cooldownText.textContent = `Next vote in ${Math.ceil(remaining / 1000)}s`;
+    }
+  }, 1000);
+}
+
+function vote(type) {
+  if (!canVote()) return;
+  counts[type]++;
+  localStorage.setItem(COUNTS, JSON.stringify(counts));
+  localStorage.setItem(LAST_VOTE, Date.now());
+  updateUI();
+  startCooldown();
+}
+
+trustBtn.onclick = () => vote("trust");
+distrustBtn.onclick = () => vote("distrust");
+
+updateUI();
+if (!canVote()) startCooldown();
+</script>
+</body>
+</html>
