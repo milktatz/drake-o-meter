@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -5,11 +6,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drake-O-Meter</title>
 
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 <style>
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
-  background: #020617;
+  background: linear-gradient(180deg, #002244, #0b1220);
   color: #e5e7eb;
   display: flex;
   align-items: center;
@@ -18,22 +24,27 @@ body {
 }
 
 .container {
-  max-width: 600px;
+  max-width: 620px;
   width: 100%;
-  background: #020617;
+  background: #021024;
   padding: 26px;
-  border-radius: 16px;
-  box-shadow: 0 15px 45px rgba(0,0,0,.6);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.6);
 }
 
 h1 {
   margin-top: 0;
-  font-size: 2.2rem;
+  font-size: 2.4rem;
+  color: #c8102e;
+}
+
+.subtitle {
+  color: #9ca3af;
 }
 
 .meter {
   background: #1e293b;
-  height: 32px;
+  height: 34px;
   border-radius: 999px;
   overflow: hidden;
   margin-bottom: 12px;
@@ -42,46 +53,48 @@ h1 {
 .fill {
   height: 100%;
   width: 50%;
-  background: linear-gradient(90deg, #22c55e, #3b82f6);
+  background: linear-gradient(90deg, #c8102e, #002244);
   text-align: center;
-  line-height: 32px;
-  color: #020617;
+  line-height: 34px;
+  color: white;
   font-weight: 800;
   transition: width .4s ease;
 }
 
-.counts {
+.stats {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .total {
   margin-bottom: 16px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 button {
   width: 100%;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: none;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 900;
   cursor: pointer;
 }
 
 .trust {
-  background: #22c55e;
+  background: #c8102e;
+  color: white;
   margin-bottom: 12px;
 }
 
 .distrust {
-  background: #ef4444;
+  background: #374151;
+  color: white;
 }
 
 button:disabled {
-  opacity: .45;
+  opacity: .4;
   cursor: not-allowed;
 }
 
@@ -102,95 +115,84 @@ a {
 <body>
 <div class="container">
   <h1>Drake-O-Meter</h1>
-  <p>Do you trust Drake May to win the Super Bowl?</p>
+  <p class="subtitle">Do you trust Drake May to win the Super Bowl?</p>
 
   <div class="meter">
     <div id="fill" class="fill">50%</div>
   </div>
 
-  <div class="counts">
-    <div>Trust: <strong id="trustCount">0</strong></div>
-    <div>Don’t Trust: <strong id="distrustCount">0</strong></div>
+  <div class="stats">
+    <div>Trust: <strong id="trust">0</strong></div>
+    <div>Don’t Trust: <strong id="distrust">0</strong></div>
   </div>
 
   <div class="total">
-    Total Votes: <strong id="totalVotes">0</strong>
+    Total Votes: <strong id="total">0</strong>
   </div>
 
   <button class="trust" id="trustBtn">Trust Drake May</button>
   <button class="distrust" id="distrustBtn">Don’t Trust Drake May</button>
 
-  <p id="cooldownText"></p>
+  <p id="status"></p>
 
   <div class="footer">
     <a href="https://venmo.com/milktatzz" target="_blank">Venmo: @milktatzz</a>
-    <span>1 vote / 5 min</span>
+    <span>Secured voting</span>
   </div>
 </div>
 
 <script>
-const COOLDOWN = 5 * 60 * 1000;
-const LAST_VOTE = "drake_o_last_vote";
-const COUNTS = "drake_o_counts";
+/* 🔥 PASTE YOUR FIREBASE CONFIG HERE 🔥 */
+firebase.initializeApp({
+  apiKey: "PASTE_HERE",
+  authDomain: "PASTE_HERE",
+  databaseURL: "PASTE_HERE",
+  projectId: "PASTE_HERE",
+  appId: "PASTE_HERE"
+});
 
-let counts = JSON.parse(localStorage.getItem(COUNTS)) || { trust: 0, distrust: 0 };
+const auth = firebase.auth();
+const db = firebase.database();
+
+const trustEl = document.getElementById("trust");
+const distrustEl = document.getElementById("distrust");
+const totalEl = document.getElementById("total");
+const fill = document.getElementById("fill");
+const status = document.getElementById("status");
 
 const trustBtn = document.getElementById("trustBtn");
 const distrustBtn = document.getElementById("distrustBtn");
-const trustCount = document.getElementById("trustCount");
-const distrustCount = document.getElementById("distrustCount");
-const totalVotesEl = document.getElementById("totalVotes");
-const fill = document.getElementById("fill");
-const cooldownText = document.getElementById("cooldownText");
 
-function updateUI() {
-  trustCount.textContent = counts.trust;
-  distrustCount.textContent = counts.distrust;
+auth.signInAnonymously();
 
-  const total = counts.trust + counts.distrust;
-  totalVotesEl.textContent = total;
+const totalsRef = db.ref("totals");
 
-  const percent = total ? Math.round((counts.trust / total) * 100) : 50;
-  fill.style.width = percent + "%";
-  fill.textContent = percent + "%";
-}
+totalsRef.on("value", snap => {
+  const data = snap.val() || { trust: 0, distrust: 0 };
+  const total = data.trust + data.distrust;
 
-function canVote() {
-  const last = localStorage.getItem(LAST_VOTE);
-  return !last || Date.now() - last > COOLDOWN;
-}
+  trustEl.textContent = data.trust;
+  distrustEl.textContent = data.distrust;
+  totalEl.textContent = total;
 
-function startCooldown() {
-  trustBtn.disabled = true;
-  distrustBtn.disabled = true;
-
-  const interval = setInterval(() => {
-    const remaining = COOLDOWN - (Date.now() - localStorage.getItem(LAST_VOTE));
-    if (remaining <= 0) {
-      cooldownText.textContent = "";
-      trustBtn.disabled = false;
-      distrustBtn.disabled = false;
-      clearInterval(interval);
-    } else {
-      cooldownText.textContent = `Next vote in ${Math.ceil(remaining / 1000)}s`;
-    }
-  }, 1000);
-}
+  const pct = total ? Math.round((data.trust / total) * 100) : 50;
+  fill.style.width = pct + "%";
+  fill.textContent = pct + "%";
+});
 
 function vote(type) {
-  if (!canVote()) return;
-  counts[type]++;
-  localStorage.setItem(COUNTS, JSON.stringify(counts));
-  localStorage.setItem(LAST_VOTE, Date.now());
-  updateUI();
-  startCooldown();
+  const uid = auth.currentUser.uid;
+  const updates = {};
+  updates[`votes/${uid}/lastVote`] = firebase.database.ServerValue.TIMESTAMP;
+  updates[`totals/${type}`] = firebase.database.ServerValue.increment(1);
+
+  db.ref().update(updates)
+    .then(() => status.textContent = "Vote recorded")
+    .catch(() => status.textContent = "You can vote again in 5 minutes");
 }
 
 trustBtn.onclick = () => vote("trust");
 distrustBtn.onclick = () => vote("distrust");
-
-updateUI();
-if (!canVote()) startCooldown();
 </script>
 </body>
 </html>
