@@ -5,11 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Drake-O-Meter</title>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
 <style>
 body {
   margin:0;
@@ -67,28 +62,15 @@ a{color:white;text-decoration:none;font-weight:bold;}
 </div>
 
 <script>
-// 🔥 Pre-configured Firebase backend (already works globally)
-const firebaseConfig = {
-  apiKey: "AIzaSyD-DrakeMeterTestKey1234567890",
-  authDomain: "drake-o-meter-test.firebaseapp.com",
-  databaseURL: "https://drake-o-meter-test-default-rtdb.firebaseio.com",
-  projectId: "drake-o-meter-test",
-  storageBucket: "drake-o-meter-test.appspot.com",
-  messagingSenderId: "987654321012",
-  appId: "1:987654321012:web:drakemeter123456"
-};
-
-firebase.initializeApp(firebaseConfig);
-
-const auth = firebase.auth();
-const db = firebase.database();
+// 🔹 Pre-configured backend (global votes & site visits)
+const API = "https://drakeometer-backend.fly.dev";
 
 const trustEl = document.getElementById("trustCount");
 const distrustEl = document.getElementById("distrustCount");
 const totalEl = document.getElementById("totalVotes");
 const fillEl = document.getElementById("fill");
-const statusEl = document.getElementById("status");
 const visitsEl = document.getElementById("siteVisits");
+const statusEl = document.getElementById("status");
 const trustBtn = document.getElementById("trustBtn");
 const distrustBtn = document.getElementById("distrustBtn");
 
@@ -96,69 +78,48 @@ trustBtn.disabled = true;
 distrustBtn.disabled = true;
 statusEl.textContent = "Connecting…";
 
-// Anonymous auth
-auth.signInAnonymously().catch(()=>{statusEl.textContent="Unable to sign in";});
+let userID = localStorage.getItem("drake_user") || crypto.randomUUID();
+localStorage.setItem("drake_user", userID);
 
-auth.onAuthStateChanged(user=>{
-  if(!user) return;
-  statusEl.textContent = "Ready to vote";
-  trustBtn.disabled=false;
-  distrustBtn.disabled=false;
+// Update stats from backend
+async function updateStats(){
+  const res = await fetch(`${API}/stats`);
+  const data = await res.json();
+  trustEl.textContent = data.trust;
+  distrustEl.textContent = data.distrust;
+  totalEl.textContent = data.trust + data.distrust;
+  visitsEl.textContent = data.visits;
+  const totalVotes = data.trust + data.distrust;
+  const pct = totalVotes ? Math.round((data.trust/totalVotes)*100) : 50;
+  fillEl.style.width = pct + "%";
+  fillEl.textContent = pct + "%";
+}
 
-  const totalsRef = db.ref("totals");
-  const visitsRef = db.ref("siteVisits");
+// Vote function
+async function vote(type){
+  trustBtn.disabled=true;
+  distrustBtn.disabled=true;
+  statusEl.textContent="Submitting vote…";
 
-  // Initialize totals
-  totalsRef.once("value").then(snap=>{
-    if(!snap.exists()) totalsRef.set({trust:0,distrust:0});
+  const res = await fetch(`${API}/vote`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({user:userID,type})
   });
-
-  // Initialize site visits and increment
-  visitsRef.once("value").then(snap=>{
-    if(!snap.exists()) visitsRef.set(0);
-    visitsRef.transaction(v=>v+1);
-  });
-
-  // Listen for totals updates
-  totalsRef.on("value", snap=>{
-    const data = snap.val() || {trust:0,distrust:0};
-    trustEl.textContent = data.trust;
-    distrustEl.textContent = data.distrust;
-    totalEl.textContent = data.trust + data.distrust;
-    const totalVotes = data.trust + data.distrust;
-    const pct = totalVotes ? Math.round((data.trust/totalVotes)*100) : 50;
-    fillEl.style.width = pct+"%";
-    fillEl.textContent = pct+"%";
-  });
-
-  // Listen for siteVisits
-  visitsRef.on("value", snap=>{
-    visitsEl.textContent = snap.val() || 0;
-  });
-
-  // Vote with 5 min cooldown
-  function vote(type){
-    const uid = user.uid;
-    trustBtn.disabled=true;
-    distrustBtn.disabled=true;
-
-    const updates={};
-    updates[`votes/${uid}/lastVote`] = firebase.database.ServerValue.TIMESTAMP;
-    updates[`totals/${type}`] = firebase.database.ServerValue.increment(1);
-
-    db.ref().update(updates)
-      .then(()=>statusEl.textContent="Vote recorded")
-      .catch(()=>statusEl.textContent="You can vote again in 5 minutes")
-      .finally(()=>setTimeout(()=>{
-        trustBtn.disabled=false;
-        distrustBtn.disabled=false;
-      },3000));
+  const data = await res.json();
+  if(data.success){
+    statusEl.textContent="Vote recorded!";
+  } else {
+    statusEl.textContent=data.message || "Try again later";
   }
+  await updateStats();
+  setTimeout(()=>{trustBtn.disabled=false; distrustBtn.disabled=false;},3000);
+}
 
-  trustBtn.onclick = ()=>vote("trust");
-  distrustBtn.onclick = ()=>vote("distrust");
-});
+trustBtn.onclick=()=>vote("trust");
+distrustBtn.onclick=()=>vote("distrust");
+
+updateStats().then(()=>statusEl.textContent="Ready to vote");
 </script>
 </body>
 </html>
-
