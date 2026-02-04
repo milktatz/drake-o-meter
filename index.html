@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drake-O-Meter</title>
 
-<!-- Firebase -->
+<!-- Firebase libraries -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -21,7 +21,6 @@ body {
   justify-content: center;
   height: 100vh;
 }
-
 .container {
   max-width: 620px;
   width: 100%;
@@ -30,84 +29,22 @@ body {
   border-radius: 18px;
   box-shadow: 0 20px 50px rgba(0,0,0,.6);
 }
-
 h1 {
   margin-top: 0;
   font-size: 2.4rem;
   color: #c8102e;
 }
-
-.subtitle {
-  color: #9ca3af;
-}
-
-.meter {
-  background: #1e293b;
-  height: 34px;
-  border-radius: 999px;
-  overflow: hidden;
-  margin-bottom: 12px;
-}
-
-.fill {
-  height: 100%;
-  width: 50%;
-  background: linear-gradient(90deg, #c8102e, #002244);
-  text-align: center;
-  line-height: 34px;
-  color: white;
-  font-weight: 800;
-  transition: width .4s ease;
-}
-
-.stats {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.total {
-  margin-bottom: 16px;
-  font-weight: 700;
-}
-
-button {
-  width: 100%;
-  padding: 14px;
-  border-radius: 14px;
-  border: none;
-  font-size: 16px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.trust {
-  background: #c8102e;
-  color: white;
-  margin-bottom: 12px;
-}
-
-.distrust {
-  background: #374151;
-  color: white;
-}
-
-button:disabled {
-  opacity: .4;
-  cursor: not-allowed;
-}
-
-.footer {
-  margin-top: 18px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-}
-
-a {
-  color: #60a5fa;
-  text-decoration: none;
-}
+.subtitle { color: #9ca3af; }
+.meter { background: #1e293b; height: 34px; border-radius: 999px; overflow: hidden; margin-bottom: 12px; }
+.fill { height: 100%; width: 50%; background: linear-gradient(90deg, #c8102e, #002244); text-align: center; line-height: 34px; color: white; font-weight: 800; transition: width .4s ease; }
+.stats { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.total { margin-bottom: 16px; font-weight: 700; }
+button { width: 100%; padding: 14px; border-radius: 14px; border: none; font-size: 16px; font-weight: 900; cursor: pointer; }
+.trust { background: #c8102e; color: white; margin-bottom: 12px; }
+.distrust { background: #374151; color: white; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+.footer { margin-top: 18px; display: flex; justify-content: space-between; font-size: 14px; }
+a { color: #60a5fa; text-decoration: none; }
 </style>
 </head>
 
@@ -141,14 +78,13 @@ a {
 </div>
 
 <script>
-<script>
-/* 🔥 YOUR FIREBASE CONFIG (unchanged) 🔥 */
+// 🔥 PASTE YOUR FIREBASE CONFIG HERE 🔥
 firebase.initializeApp({
-  apiKey: "PASTE_HERE",
-  authDomain: "PASTE_HERE",
-  databaseURL: "PASTE_HERE",
-  projectId: "PASTE_HERE",
-  appId: "PASTE_HERE"
+  apiKey: "AIzaSyAbJa6uyULQJQRcPguwBJ10l5Py39wtI8Q",
+  authDomain: "drake-o-meter.firebaseapp.com",
+  databaseURL: "https://drake-o-meter-default-rtdb.firebaseio.com",
+  projectId: "drake-o-meter",
+  appId: "1:357403053716:web:c858368cecb94530e6ae81"
 });
 
 const auth = firebase.auth();
@@ -157,98 +93,4 @@ const db = firebase.database();
 const trustEl = document.getElementById("trust");
 const distrustEl = document.getElementById("distrust");
 const totalEl = document.getElementById("total");
-const fill = document.getElementById("fill");
-const status = document.getElementById("status");
-
-const trustBtn = document.getElementById("trustBtn");
-const distrustBtn = document.getElementById("distrustBtn");
-
-trustBtn.disabled = true;
-distrustBtn.disabled = true;
-status.textContent = "Connecting…";
-
-/* ✅ AUTH FIX */
-auth.onAuthStateChanged(user => {
-  if (!user) return;
-
-  status.textContent = "Ready to vote";
-  trustBtn.disabled = false;
-  distrustBtn.disabled = false;
-
-  const totalsRef = db.ref("totals");
-
-  /* ✅ Initialize totals if missing */
-  totalsRef.once("value").then(snap => {
-    if (!snap.exists()) {
-      totalsRef.set({ trust: 0, distrust: 0 });
-    }
-  });
-
-  /* ✅ Live updates */
-  totalsRef.on("value", snap => {
-    const data = snap.val() || { trust: 0, distrust: 0 };
-    const total = data.trust + data.distrust;
-
-    trustEl.textContent = data.trust;
-    distrustEl.textContent = data.distrust;
-    totalEl.textContent = total;
-
-    const pct = total ? Math.round((data.trust / total) * 100) : 50;
-    fill.style.width = pct + "%";
-    fill.textContent = pct + "%";
-  });
-
-  /* ✅ SAFE VOTE FUNCTION */
-  window.vote = function(type) {
-    const uid = user.uid;
-
-    trustBtn.disabled = true;
-    distrustBtn.disabled = true;
-
-    const updates = {};
-    updates[`votes/${uid}/lastVote`] = firebase.database.ServerValue.TIMESTAMP;
-    updates[`totals/${type}`] = firebase.database.ServerValue.increment(1);
-
-    db.ref().update(updates)
-      .then(() => {
-        status.textContent = "Vote recorded";
-        setTimeout(() => {
-          trustBtn.disabled = false;
-          distrustBtn.disabled = false;
-        }, 3000);
-      })
-      .catch(() => {
-        status.textContent = "You can vote again in 5 minutes";
-        setTimeout(() => {
-          trustBtn.disabled = false;
-          distrustBtn.disabled = false;
-        }, 3000);
-      });
-  };
-});
-
-/* Start anonymous auth */
-auth.signInAnonymously();
-
-/* Button hooks */
-trustBtn.onclick = () => vote("trust");
-distrustBtn.onclick = () => vote("distrust");
-</script>
-});
-
-function vote(type) {
-  const uid = auth.currentUser.uid;
-  const updates = {};
-  updates[`votes/${uid}/lastVote`] = firebase.database.ServerValue.TIMESTAMP;
-  updates[`totals/${type}`] = firebase.database.ServerValue.increment(1);
-
-  db.ref().update(updates)
-    .then(() => status.textContent = "Vote recorded")
-    .catch(() => status.textContent = "You can vote again in 5 minutes");
-}
-
-trustBtn.onclick = () => vote("trust");
-distrustBtn.onclick = () => vote("distrust");
-</script>
-</body>
-</html>
+const fill = d
